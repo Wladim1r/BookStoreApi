@@ -6,7 +6,7 @@ type Book struct {
 	gorm.Model
 	Title  string `json:"title" binding:"required"`
 	Author string `json:"author" binding:"required"`
-	Price  uint   `json:"price"`
+	Price  uint   `json:"price" binding:"required"`
 	UserID uint   `json:"user_id"`
 	User   User   `gorm:"foreignKey:UserID" json:"-"`
 }
