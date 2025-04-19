@@ -2,7 +2,9 @@ package database
 
 import (
 	"bookstore-api/internal/models"
+	"fmt"
 	"log"
+	"os"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -11,7 +13,12 @@ import (
 var db *gorm.DB
 
 func InitDB() *gorm.DB {
-	dsn := "host=localhost user=postgres password=password dbname=postgres port=5432 sslmode=disable"
+	dsn := fmt.Sprintf("host=db user=%s password=%s dbname=%s port=5432 sslmode=disable",
+		os.Getenv("DB_USER"),
+		os.Getenv("DB_PASSWORD"),
+		os.Getenv("DB_NAME"),
+	)
+
 	var err error
 
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
