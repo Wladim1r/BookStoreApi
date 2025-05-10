@@ -5,12 +5,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type RegisterRequest struct {
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
-}
-
-type LoginRequest struct {
+type Request struct {
 	Username string `json:"username" binding:"required"`
 	Password string `json:"password" binding:"required"`
 }

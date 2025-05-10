@@ -1,9 +1,8 @@
-package api
+package handlers
 
 import (
 	"bookstore-api/api/service"
 	"bookstore-api/internal/models"
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -11,15 +10,15 @@ import (
 )
 
 type BookHandler struct {
-	service service.BookService
+	Service service.BookService
 }
 
 func NewBookHandler(service service.BookService) *BookHandler {
-	return &BookHandler{service: service}
+	return &BookHandler{Service: service}
 }
 
 func (b *BookHandler) GetAllBooks(c *gin.Context) {
-	books, err := b.service.GetAllBooks()
+	books, err := b.Service.GetAllBooks()
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"message": "Invalid request",
@@ -78,11 +77,7 @@ func (b *BookHandler) GetUserBook(c *gin.Context) {
 		})
 		return
 	}
-	var userID uint
-	switch v := userID_iface.(type) {
-	case float64:
-		userID = uint(v)
-	}
+	userID := interface_into_uint(userID_iface)
 
 	bookIDStr := c.Param("id")
 	bookID, err := strconv.Atoi(bookIDStr)
@@ -93,10 +88,10 @@ func (b *BookHandler) GetUserBook(c *gin.Context) {
 		return
 	}
 
-	book, err := b.service.GetUserBook(userID, uint(bookID))
+	book, err := b.Service.GetUserBook(userID, uint(bookID))
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
-			"message": fmt.Sprintf("Book with entred ID does not exist"),
+			"error": "Book with entred ID does not exist",
 		})
 		return
 	}
@@ -114,16 +109,12 @@ func (b *BookHandler) GetUserBooks(c *gin.Context) {
 		})
 		return
 	}
-	var userID uint
-	switch v := userID_iface.(type) {
-	case float64:
-		userID = uint(v)
-	}
+	userID := interface_into_uint(userID_iface)
 
-	books, err := b.service.GetUserBooks(userID)
+	books, err := b.Service.GetUserBooks(userID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": err.Error(),
+			"error": "Database connection failed",
 		})
 		return
 	}
@@ -145,21 +136,17 @@ func (b *BookHandler) PostBook(c *gin.Context) {
 		})
 		return
 	}
-	var userID uint
-	switch v := userID_iface.(type) {
-	case float64:
-		userID = uint(v)
-	}
+	userID := interface_into_uint(userID_iface)
 
 	var input struct {
-		Title  string `json:"title"`
-		Author string `json:"author"`
-		Price  uint   `json:"price"`
+		Title  string `json:"title" binding:"required"`
+		Author string `json:"author" binding:"required"`
+		Price  uint   `json:"price" binding:"required"`
 	}
 
 	if err := c.ShouldBindJSON(&input); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Invalid body request",
+			"error": "Invalid body request",
 		})
 		return
 	}
@@ -171,10 +158,10 @@ func (b *BookHandler) PostBook(c *gin.Context) {
 		UserID: userID,
 	}
 
-	createdBook, err := b.service.PostBook(book)
+	createdBook, err := b.Service.PostBook(book)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "Error when creating Book",
+			"error": "Database connection failed",
 		})
 		return
 	}
@@ -192,29 +179,26 @@ func (b *BookHandler) UpdateBook(c *gin.Context) {
 		})
 		return
 	}
-	var userID uint
-	switch v := userID_iface.(type) {
-	case float64:
-		userID = uint(v)
-	}
-
-	var input struct {
-		Title  string `json:"title"`
-		Author string `json:"author"`
-		Price  uint   `json:"price"`
-	}
-	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Invalid body request",
-		})
-		return
-	}
+	userID := interface_into_uint(userID_iface)
 
 	bookIDStr := c.Param("id")
 	bookID, err := strconv.Atoi(bookIDStr)
 	if err != nil || bookID <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": "Invalid ID in request",
+		})
+		return
+	}
+
+	var input struct {
+		Title  string `json:"title" binding:"required"`
+		Author string `json:"author" binding:"required"`
+		Price  uint   `json:"price" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&input); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Invalid body request",
 		})
 		return
 	}
@@ -226,15 +210,15 @@ func (b *BookHandler) UpdateBook(c *gin.Context) {
 		UserID: userID,
 	}
 
-	err = b.service.UpdateBook(userID, uint(bookID), book)
+	err = b.Service.UpdateBook(userID, uint(bookID), book)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"message": "You do not have permission to make changes Book`s ID",
+			"error": "Database connection failed",
 		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"message": "Alterations have been done",
 	})
 }
@@ -247,11 +231,7 @@ func (b *BookHandler) DeleteBook(c *gin.Context) {
 		})
 		return
 	}
-	var userID uint
-	switch v := userID_iface.(type) {
-	case float64:
-		userID = uint(v)
-	}
+	userID := interface_into_uint(userID_iface)
 
 	bookIDStr := c.Param("id")
 	bookID, err := strconv.Atoi(bookIDStr)
@@ -262,10 +242,10 @@ func (b *BookHandler) DeleteBook(c *gin.Context) {
 		return
 	}
 
-	err = b.service.DeleteBook(userID, uint(bookID))
+	err = b.Service.DeleteBook(userID, uint(bookID))
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Could not delete Book",
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database connection failed",
 		})
 		return
 	}
@@ -273,4 +253,17 @@ func (b *BookHandler) DeleteBook(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "Book was successfully deleted",
 	})
+}
+
+func interface_into_uint(userID_iface interface{}) uint {
+	var userID uint
+	switch v := userID_iface.(type) {
+	case float64:
+		userID = uint(v)
+	case int:
+		userID = uint(v)
+	case uint:
+		userID = v
+	}
+	return userID
 }

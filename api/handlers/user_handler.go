@@ -1,4 +1,4 @@
-package api
+package handlers
 
 import (
 	"bookstore-api/api/service"
@@ -11,15 +11,15 @@ import (
 )
 
 type UserHandler struct {
-	service service.UserService
+	Service service.UserService
 }
 
 func NewUserHandler(s service.UserService) *UserHandler {
-	return &UserHandler{service: s}
+	return &UserHandler{Service: s}
 }
 
 func (u *UserHandler) Register(c *gin.Context) {
-	var creds models.RegisterRequest
+	var creds models.Request
 
 	if err := c.ShouldBindJSON(&creds); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -40,9 +40,9 @@ func (u *UserHandler) Register(c *gin.Context) {
 		return
 	}
 
-	if err := u.service.CreateUser(user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": err.Error(),
+	if err := u.Service.CreateUser(user); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Database connection failed",
 		})
 		return
 	}
@@ -53,7 +53,7 @@ func (u *UserHandler) Register(c *gin.Context) {
 }
 
 func (u *UserHandler) Login(c *gin.Context) {
-	var creds models.LoginRequest
+	var creds models.Request
 
 	if err := c.ShouldBindJSON(&creds); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
@@ -62,7 +62,7 @@ func (u *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	user, err := u.service.GetByUsername(creds.Username)
+	user, err := u.Service.GetByUsername(creds.Username)
 	if err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "You have not registered yet",
@@ -91,7 +91,7 @@ func (u *UserHandler) Login(c *gin.Context) {
 }
 
 func (u *UserHandler) GetAllUsers(c *gin.Context) {
-	users, err := u.service.GetAllUsers()
+	users, err := u.Service.GetAllUsers()
 
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -106,16 +106,16 @@ func (u *UserHandler) GetAllUsers(c *gin.Context) {
 func (u *UserHandler) DeleteByUsername(c *gin.Context) {
 	username := c.Param("username")
 
-	if _, err := u.service.GetByUsername(username); err != nil {
+	if _, err := u.Service.GetByUsername(username); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{
 			"error": "User is not exists",
 		})
 		return
 	}
 
-	if err := u.service.DeleteByUsername(username); err != nil {
+	if err := u.Service.DeleteByUsername(username); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Could not delete User",
+			"error": "Database connection failed",
 		})
 		return
 	}
