@@ -2,9 +2,10 @@ package handlers
 
 import (
 	"bookstore-api/api/service"
+	"bookstore-api/internal/lib/errs"
 	"bookstore-api/internal/models"
+	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
@@ -17,253 +18,264 @@ func NewBookHandler(service service.BookService) *BookHandler {
 	return &BookHandler{Service: service}
 }
 
+// @Summary Get books of all users
+// @Description Get books collection for all registered users
+// @Tags Admin
+// @ID get-all-books
+// @Security BasicAuth
+// @Accept json
+// @Produce json
+// @Success 200 {object} models.UsersBooksResponse "List of books of all users"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Records not found"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /admin/books [get]
 func (b *BookHandler) GetAllBooks(c *gin.Context) {
 	books, err := b.Service.GetAllBooks()
 	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"message": "Invalid request",
-		})
-		return
-	}
 
-	type bookResponse struct {
-		ID     uint   `json:"id"`
-		Title  string `json:"title"`
-		Author string `json:"author"`
-		Price  uint   `json:"price"`
-	}
-
-	type userBooksResponse struct {
-		Username   string         `json:"username"`
-		TotalBooks int            `json:"total_books"`
-		Books      []bookResponse `json:"books"`
-	}
-
-	usersMap := make(map[string]*userBooksResponse)
-
-	for _, book := range books {
-		username := book.User.Username
-
-		if _, exists := usersMap[username]; !exists {
-			usersMap[username] = &userBooksResponse{
-				Username:   username,
-				TotalBooks: 0,
-				Books:      []bookResponse{},
-			}
+		switch {
+		case errors.Is(err, errs.ErrNotFound):
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: "Could not found records",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
 		}
 
-		usersMap[username].Books = append(usersMap[username].Books, bookResponse{
-			ID:     book.ID,
-			Title:  book.Title,
-			Author: book.Author,
-			Price:  book.Price,
-		})
-		usersMap[username].TotalBooks++
-	}
-
-	result := make([]userBooksResponse, 0, len(usersMap))
-	for _, userBooks := range usersMap {
-		result = append(result, *userBooks)
-	}
-
-	c.JSON(http.StatusOK, result)
-}
-
-func (b *BookHandler) GetUserBook(c *gin.Context) {
-	userID_iface, exists := c.Get("userID")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authentication required",
-		})
-		return
-	}
-	userID := interface_into_uint(userID_iface)
-
-	bookIDStr := c.Param("id")
-	bookID, err := strconv.Atoi(bookIDStr)
-	if err != nil || bookID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid ID in request",
-		})
 		return
 	}
 
-	book, err := b.Service.GetUserBook(userID, uint(bookID))
-	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{
-			"error": "Book with entred ID does not exist",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"data": book,
+	c.JSON(http.StatusOK, models.UsersBooksResponse{
+		Data: books,
 	})
 }
 
+// @Summary Get books of user
+// @Description Get user books collection with parameters
+// @Tags Books
+// @ID get-user-books
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param author query string false "Filter by author name" example("Пушкин")
+// @Param title query string false "Filter by title" example("Я вас любил")
+// @Param limit query int false "Limit number of records" minimum(1) example(10)
+// @Success 200 {object} models.GetBooks "List of books of user"
+// @Failure 400 {object} models.ErrorResponse "Invalid query body"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Records not found"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /api/books [get]
 func (b *BookHandler) GetUserBooks(c *gin.Context) {
 	userID_iface, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authentication required",
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error: "Authentication required",
 		})
 		return
 	}
-	userID := interface_into_uint(userID_iface)
 
-	books, err := b.Service.GetUserBooks(userID)
+	author := c.Query("author")
+	title := c.Query("title")
+	limitStr := c.Query("limit")
+
+	books, userID, err := b.Service.GetUserBooks(userID_iface, author, title, limitStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database connection failed",
-		})
+
+		switch {
+		case errors.Is(err, errs.ErrInvalidParam):
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Error: "Invalid limit value",
+			})
+		case errors.Is(err, errs.ErrNotFound):
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: "Could not found records",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"data": books,
-		"meta": gin.H{
-			"total":   len(books),
-			"user_id": userID,
+	c.JSON(http.StatusOK, models.GetBooks{
+		Data: books,
+		Meta: models.MetaBook{
+			Total:  len(books),
+			UserID: userID,
 		},
 	})
 }
 
+// @Summary Create book
+// @Description Create book with users parameters
+// @Tags Books
+// @ID post-user-book
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param request body models.BookRequest true "Data for create book"
+// @Success 201 {object} models.SuccessResponse "Message about successfully creating"
+// @Failure 400 {object} models.ErrorResponse "Invalid request body"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /api/books [post]
 func (b *BookHandler) PostBook(c *gin.Context) {
 	userID_iface, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authentication required",
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error: "Authentication required",
 		})
 		return
 	}
-	userID := interface_into_uint(userID_iface)
 
-	var input struct {
-		Title  string `json:"title" binding:"required"`
-		Author string `json:"author" binding:"required"`
-		Price  uint   `json:"price" binding:"required"`
-	}
+	var input models.BookRequest
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid body request",
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: "Invalid body request",
 		})
 		return
 	}
 
-	book := models.Book{
-		Title:  input.Title,
-		Author: input.Author,
-		Price:  input.Price,
-		UserID: userID,
-	}
-
-	createdBook, err := b.Service.PostBook(book)
+	err := b.Service.PostBook(userID_iface, input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database connection failed",
+		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+			Error: "Database operation failed",
 		})
 		return
 	}
 
-	c.JSON(http.StatusCreated, gin.H{
-		"Created Book": *createdBook,
+	c.JSON(http.StatusCreated, models.SuccessResponse{
+		Message: "Book was successfully created",
 	})
 }
 
+// @Summary Update book
+// @Description Change book to new parameters
+// @Tags Books
+// @ID update-user-book
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "ID of the book to change" minimum(1) example(13)
+// @Param request body models.BookRequest true "New data for change existing data"
+// @Success 200 {object} models.SuccessResponse "Message about successfully updating"
+// @Failure 400 {object} models.ErrorResponse "Invalid request body"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Record not found"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /api/books/{id} [patch]
 func (b *BookHandler) UpdateBook(c *gin.Context) {
 	userID_iface, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authentication required",
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error: "Authentication required",
 		})
 		return
 	}
-	userID := interface_into_uint(userID_iface)
 
 	bookIDStr := c.Param("id")
-	bookID, err := strconv.Atoi(bookIDStr)
-	if err != nil || bookID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid ID in request",
-		})
-		return
-	}
 
-	var input struct {
-		Title  string `json:"title" binding:"required"`
-		Author string `json:"author" binding:"required"`
-		Price  uint   `json:"price" binding:"required"`
-	}
+	var input models.BookRequest
 
 	if err := c.ShouldBindJSON(&input); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid body request",
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: "Invalid body request",
 		})
 		return
 	}
 
-	book := models.Book{
-		Title:  input.Title,
-		Author: input.Author,
-		Price:  input.Price,
-		UserID: userID,
-	}
-
-	err = b.Service.UpdateBook(userID, uint(bookID), book)
+	err := b.Service.UpdateBook(userID_iface, bookIDStr, input)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database connection failed",
-		})
+
+		switch {
+		case errors.Is(err, errs.ErrNotFound):
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: "Could not found record",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Alterations have been done",
+	c.JSON(http.StatusOK, models.SuccessResponse{
+		Message: "Alterations have been done",
 	})
 }
 
+// @Summary Delete book
+// @Description Permanently delete book
+// @Tags Books
+// @ID delete-user-book
+// @Security ApiKeyAuth
+// @Accept json
+// @Produce json
+// @Param id path int true "ID of the book to delete" minimum(1) example(3)
+// @Success 200 {object} models.SuccessResponse "Message about successfully deleting"
+// @Failure 400 {object} models.ErrorResponse "Invalid request body"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Record not found"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /api/books/{id} [delete]
 func (b *BookHandler) DeleteBook(c *gin.Context) {
 	userID_iface, exists := c.Get("userID")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Authentication required",
+		c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+			Error: "Authentication required",
 		})
 		return
 	}
-	userID := interface_into_uint(userID_iface)
 
 	bookIDStr := c.Param("id")
-	bookID, err := strconv.Atoi(bookIDStr)
-	if err != nil || bookID <= 0 {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid ID in request",
-		})
-		return
-	}
 
-	err = b.Service.DeleteBook(userID, uint(bookID))
+	err := b.Service.DeleteBook(userID_iface, bookIDStr)
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database connection failed",
-		})
+
+		switch {
+		case errors.Is(err, errs.ErrInvalidID):
+			c.JSON(http.StatusBadRequest, models.ErrorResponse{
+				Error: "Invalid ID",
+			})
+		case errors.Is(err, errs.ErrNotFound):
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: "Could not found record",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{
-		"message": "Book was successfully deleted",
+	c.JSON(http.StatusOK, models.SuccessResponse{
+		Message: "Book was successfully deleted",
 	})
-}
-
-func interface_into_uint(userID_iface interface{}) uint {
-	var userID uint
-	switch v := userID_iface.(type) {
-	case float64:
-		userID = uint(v)
-	case int:
-		userID = uint(v)
-	case uint:
-		userID = v
-	}
-	return userID
 }

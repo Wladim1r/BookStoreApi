@@ -1,7 +1,9 @@
 package repository
 
 import (
+	"bookstore-api/internal/lib/errs"
 	"bookstore-api/internal/models"
+	"fmt"
 
 	"gorm.io/gorm"
 )
@@ -22,23 +24,55 @@ func NewUserRepository(db *gorm.DB) UserRepository {
 }
 
 func (r *userRepository) CreateUser(user models.User) error {
-	return r.db.Create(&user).Error
+	result := r.db.Create(&user)
+
+	if result.Error != nil {
+		return fmt.Errorf("%w: %v", errs.ErrDBOperation, result.Error)
+	}
+
+	return nil
 }
 
 func (r *userRepository) GetAllUsers() ([]models.User, error) {
 	var users []models.User
-	err := r.db.Find(&users).Error
+	result := r.db.Preload("Books").Find(&users)
 
-	return users, err
+	if result.Error != nil {
+		return nil, fmt.Errorf("%w: %v", errs.ErrDBOperation, result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return nil, errs.ErrNotFound
+	}
+
+	return users, nil
 }
 
 func (r *userRepository) GetByUsername(username string) (models.User, error) {
 	var user models.User
-	err := r.db.Where("username = ?", username).First(&user).Error
+	result := r.db.Where("username = ?", username).First(&user)
 
-	return user, err
+	if result.Error != nil {
+		return models.User{}, fmt.Errorf("%w: %v", errs.ErrDBOperation, result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return models.User{}, errs.ErrNotAuthorized
+	}
+
+	return user, nil
 }
 
 func (r *userRepository) DeleteByUsername(username string) error {
-	return r.db.Unscoped().Where("username = ?", username).Delete(&models.User{}).Error
+	result := r.db.Unscoped().Where("username = ?", username).Delete(&models.User{})
+
+	if result.Error != nil {
+		return fmt.Errorf("%w: %v", errs.ErrDBOperation, result.Error)
+	}
+
+	if result.RowsAffected == 0 {
+		return errs.ErrNotFound
+	}
+
+	return nil
 }

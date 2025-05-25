@@ -1,0 +1,761 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "RESP API for managing books and personal user list of books",
+        "title": "BookStore API",
+        "contact": {},
+        "version": "1.1.3"
+    },
+    "host": "localhost:8080",
+    "basePath": "/",
+    "paths": {
+        "/admin/books": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get books collection for all registered users",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get books of all users",
+                "operationId": "get-all-books",
+                "responses": {
+                    "200": {
+                        "description": "List of books of all users",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.UsersBooksResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Records not found",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/users": {
+            "get": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Get credentials of all users",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Get all users",
+                "operationId": "get-all-users",
+                "responses": {
+                    "200": {
+                        "description": "List of all users",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.UsersResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Records not found",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/users/{username}": {
+            "delete": {
+                "security": [
+                    {
+                        "BasicAuth": []
+                    }
+                ],
+                "description": "Delete user by username",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Admin"
+                ],
+                "summary": "Delete user",
+                "operationId": "delete-user",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Username to delete",
+                        "name": "username",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Message about successfully deleting",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.UsersResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Record not found",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/books": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Get user books collection with parameters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Books"
+                ],
+                "summary": "Get books of user",
+                "operationId": "get-user-books",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "\"Пушкин\"",
+                        "description": "Filter by author name",
+                        "name": "author",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "example": "\"Я вас любил\"",
+                        "description": "Filter by title",
+                        "name": "title",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 10,
+                        "description": "Limit number of records",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "List of books of user",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.GetBooks"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid query body",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Records not found",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create book with users parameters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Books"
+                ],
+                "summary": "Create book",
+                "operationId": "post-user-book",
+                "parameters": [
+                    {
+                        "description": "Data for create book",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.BookRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Message about successfully creating",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/books/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Permanently delete book",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Books"
+                ],
+                "summary": "Delete book",
+                "operationId": "delete-user-book",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 3,
+                        "description": "ID of the book to delete",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Message about successfully deleting",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Record not found",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Change book to new parameters",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Books"
+                ],
+                "summary": "Update book",
+                "operationId": "update-user-book",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "example": 13,
+                        "description": "ID of the book to change",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New data for change existing data",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.BookRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Message about successfully updating",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid request body",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Record not found",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Database or Server error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/login": {
+            "post": {
+                "description": "Login in created account with yourself credentials",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authorization"
+                ],
+                "summary": "Login",
+                "operationId": "login-user",
+                "parameters": [
+                    {
+                        "description": "Credentials for login in created accound",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Give Token after successfully authorization",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid body request",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User do not registred",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Incorrect password",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/auth/register": {
+            "post": {
+                "description": "Register user with his username and password",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Authorization"
+                ],
+                "summary": "Register new user",
+                "operationId": "register-user",
+                "parameters": [
+                    {
+                        "description": "Credentials for create user account",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "User created successfully",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.SuccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid body request",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "User unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/bookstore-api_internal_models.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "bookstore-api_internal_models.Book": {
+            "description": "Book model to show it contains",
+            "type": "object",
+            "required": [
+                "author",
+                "price",
+                "title"
+            ],
+            "properties": {
+                "author": {
+                    "type": "string",
+                    "example": "Л. Н. Толстой"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "price": {
+                    "type": "integer",
+                    "example": 1300
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Война и мир"
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "bookstore-api_internal_models.BookRequest": {
+            "description": "Book creation/update request",
+            "type": "object",
+            "required": [
+                "author",
+                "price",
+                "title"
+            ],
+            "properties": {
+                "author": {
+                    "type": "string",
+                    "example": "Л. Н. Толстой"
+                },
+                "price": {
+                    "type": "integer",
+                    "example": 1300
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Война и мир"
+                }
+            }
+        },
+        "bookstore-api_internal_models.BookResponse": {
+            "description": "Basic book information response",
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string",
+                    "example": "Л. Н. Толстой"
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "price": {
+                    "type": "integer",
+                    "example": 1300
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Война и мир"
+                }
+            }
+        },
+        "bookstore-api_internal_models.ErrorResponse": {
+            "description": "Default error response",
+            "type": "object",
+            "properties": {
+                "error": {
+                    "type": "string",
+                    "example": "error description"
+                }
+            }
+        },
+        "bookstore-api_internal_models.GetBooks": {
+            "description": "Paginated books response",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/bookstore-api_internal_models.Book"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/bookstore-api_internal_models.MetaBook"
+                }
+            }
+        },
+        "bookstore-api_internal_models.MetaBook": {
+            "description": "Books response metadata",
+            "type": "object",
+            "properties": {
+                "total": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "user_id": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "bookstore-api_internal_models.Request": {
+            "description": "User credentials for login or registration",
+            "type": "object",
+            "required": [
+                "password",
+                "username"
+            ],
+            "properties": {
+                "password": {
+                    "type": "string",
+                    "example": "12345qwerty"
+                },
+                "username": {
+                    "type": "string",
+                    "example": "Wladim1r"
+                }
+            }
+        },
+        "bookstore-api_internal_models.SuccessResponse": {
+            "description": "Default successfully response",
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string",
+                    "example": "message description"
+                }
+            }
+        },
+        "bookstore-api_internal_models.UserBooksResponse": {
+            "description": "User profile with books list",
+            "type": "object",
+            "properties": {
+                "books": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/bookstore-api_internal_models.BookResponse"
+                    }
+                },
+                "total_books": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "username": {
+                    "type": "string",
+                    "example": "Wladim1r"
+                }
+            }
+        },
+        "bookstore-api_internal_models.UserResponse": {
+            "description": "User response including ID, username and quantity of books",
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 10
+                },
+                "username": {
+                    "type": "string",
+                    "example": "Wladim1r"
+                }
+            }
+        },
+        "bookstore-api_internal_models.UsersBooksResponse": {
+            "description": "List of users with their books",
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/bookstore-api_internal_models.UserBooksResponse"
+                    }
+                }
+            }
+        },
+        "bookstore-api_internal_models.UsersResponse": {
+            "description": "Response containing user array",
+            "type": "object",
+            "properties": {
+                "users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/bookstore-api_internal_models.UserResponse"
+                    }
+                }
+            }
+        }
+    },
+    "securityDefinitions": {
+        "ApiKeyAuth": {
+            "description": "JWT token with 'Bearer ' prefix. Example: `Bearer eyJhbGci...`",
+            "type": "apiKey",
+            "name": "Authorization",
+            "in": "header"
+        },
+        "BasicAuth": {
+            "type": "basic"
+        }
+    }
+}

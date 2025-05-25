@@ -4,13 +4,27 @@ import (
 	hand "bookstore-api/api/handlers"
 	repo "bookstore-api/api/repository"
 	serv "bookstore-api/api/service"
+	_ "bookstore-api/docs"
 	db "bookstore-api/internal/database"
 	"bookstore-api/internal/middleware"
 	"bookstore-api/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	swaggerFiles "github.com/swaggo/files"
+	ginSwagger "github.com/swaggo/gin-swagger"
 )
 
+// @title BookStore API
+// @version 1.1.3
+// @description RESP API for managing books and personal user list of books
+// @host localhost:8080
+// @BasePath /
+//
+// @securityDefinitions.basic BasicAuth
+// @securityDefinitions.apikey ApiKeyAuth
+// @in header
+// @name Authorization
+// @description JWT token with 'Bearer ' prefix. Example: `Bearer eyJhbGci...`
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
@@ -27,8 +41,11 @@ func main() {
 	r := gin.Default()
 	r.Use(gin.LoggerWithFormatter(utils.Log))
 
+	url := ginSwagger.URL("/swagger/doc.json")
+	r.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler, url))
+
 	// #######################___PUBLIC___######################
-	public := r.Group("/api")
+	public := r.Group("/auth")
 	{
 		public.POST("/register", userHandler.Register)
 		public.POST("/login", userHandler.Login)
@@ -41,7 +58,6 @@ func main() {
 	private := r.Group("/api")
 	private.Use(middleware.JWTAuth())
 	{
-		private.GET("/books/:id", bookHandler.GetUserBook)
 		private.GET("/books", bookHandler.GetUserBooks)
 		private.POST("/books", bookHandler.PostBook)
 		private.PATCH("/books/:id", bookHandler.UpdateBook)

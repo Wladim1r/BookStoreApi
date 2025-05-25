@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"bookstore-api/api/service"
+	"bookstore-api/internal/lib/errs"
 	"bookstore-api/internal/models"
-	"bookstore-api/internal/utils"
+	"errors"
 	"fmt"
 	"net/http"
 
@@ -18,109 +19,188 @@ func NewUserHandler(s service.UserService) *UserHandler {
 	return &UserHandler{Service: s}
 }
 
+// @Summary Register new user
+// @Description Register user with his username and password
+// @Tags Authorization
+// @ID register-user
+// @Accept json
+// @Produce json
+// @Param request body models.Request true "Credentials for create user account"
+// @Success 200 {object} models.SuccessResponse "User created successfully"
+// @Failure 400 {object} models.ErrorResponse "Invalid body request"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 500 {object} models.ErrorResponse "Internal Server Error"
+// @Router /auth/register [post]
 func (u *UserHandler) Register(c *gin.Context) {
 	var creds models.Request
 
 	if err := c.ShouldBindJSON(&creds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid body request",
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: "Invalid body request",
 		})
 		return
 	}
 
-	user := models.User{
-		Username: creds.Username,
-		Password: creds.Password,
-	}
+	err := u.Service.CreateUser(creds)
+	if err != nil {
 
-	if err := user.HashPassword(); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Failed to hash password",
-		})
+		switch {
+		case errors.Is(err, errs.ErrInternal):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Generate password failed",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	if err := u.Service.CreateUser(user); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database connection failed",
-		})
-		return
-	}
-
-	c.JSON(http.StatusCreated, gin.H{
-		"message": "User created",
+	c.JSON(http.StatusCreated, models.SuccessResponse{
+		Message: "User created",
 	})
 }
 
+// @Summary Login
+// @Description Login in created account with yourself credentials
+// @Tags Authorization
+// @ID login-user
+// @Accept json
+// @Produce json
+// @Param request body models.Request true "Credentials for login in created accound"
+// @Success 200 {object} models.SuccessResponse "Give Token after successfully authorization"
+// @Failure 400 {object} models.ErrorResponse "Invalid body request"
+// @Failure 401 {object} models.ErrorResponse "User do not registred"
+// @Failure 403 {object} models.ErrorResponse "Incorrect password"
+// @Failure 500 {object} models.ErrorResponse "Internal Server Error"
+// @Router /auth/login [post]
 func (u *UserHandler) Login(c *gin.Context) {
 	var creds models.Request
 
 	if err := c.ShouldBindJSON(&creds); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"error": "Invalid body request",
+		c.JSON(http.StatusBadRequest, models.ErrorResponse{
+			Error: "Invalid body request",
 		})
 		return
 	}
 
-	user, err := u.Service.GetByUsername(creds.Username)
+	token, err := u.Service.GetUserToken(creds)
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "You have not registered yet",
-		})
+		switch {
+		case errors.Is(err, errs.ErrNotRegistred):
+			c.JSON(http.StatusForbidden, models.ErrorResponse{
+				Error: "Incorrect password",
+			})
+		case errors.Is(err, errs.ErrNotAuthorized):
+			c.JSON(http.StatusUnauthorized, models.ErrorResponse{
+				Error: "You are not authorized",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		case errors.Is(err, errs.ErrInternal):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Generate JWT token failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	if err := user.CheckPassword(creds.Password); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "Entred incorrect password",
-		})
-		return
-	}
-
-	token, err := utils.GenerateToken(user.ID)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Could not create JWT token",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("Your token: %s", token),
+	c.JSON(http.StatusOK, models.SuccessResponse{
+		Message: fmt.Sprintf("Your token: %s", token),
 	})
 }
 
+// @Summary Get all users
+// @Description Get credentials of all users
+// @Tags Admin
+// @ID get-all-users
+// @Security BasicAuth
+// @Accept json
+// @Produce json
+// @Success 200 {object} models.UsersResponse "List of all users"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Records not found"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /admin/users [get]
 func (u *UserHandler) GetAllUsers(c *gin.Context) {
 	users, err := u.Service.GetAllUsers()
 
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Could not get Users list",
-		})
+
+		switch {
+		case errors.Is(err, errs.ErrNotFound):
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: "Could not found records",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	c.JSON(http.StatusOK, users)
+	c.JSON(http.StatusOK, models.UsersResponse{
+		Users: users,
+	})
 }
 
+// @Summary Delete user
+// @Description Delete user by username
+// @Tags Admin
+// @ID delete-user
+// @Security BasicAuth
+// @Accept json
+// @Produce json
+// @Param username path string true "Username to delete"
+// @Success 200 {object} models.UsersResponse "Message about successfully deleting"
+// @Failure 401 {object} models.ErrorResponse "User unauthorized"
+// @Failure 404 {object} models.ErrorResponse "Record not found"
+// @Failure 500 {object} models.ErrorResponse "Database or Server error"
+// @Router /admin/users/{username} [delete]
 func (u *UserHandler) DeleteByUsername(c *gin.Context) {
 	username := c.Param("username")
 
-	if _, err := u.Service.GetByUsername(username); err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{
-			"error": "User is not exists",
-		})
+	err := u.Service.DeleteByUsername(username)
+	if err != nil {
+
+		switch {
+		case errors.Is(err, errs.ErrNotFound):
+			c.JSON(http.StatusNotFound, models.ErrorResponse{
+				Error: "Could not found record",
+			})
+		case errors.Is(err, errs.ErrDBOperation):
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Database operation failed",
+			})
+		default:
+			c.JSON(http.StatusInternalServerError, models.ErrorResponse{
+				Error: "Internal server error",
+			})
+		}
+
 		return
 	}
 
-	if err := u.Service.DeleteByUsername(username); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Database connection failed",
-		})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{
-		"message": "User account was successfully deleted",
+	c.JSON(http.StatusOK, models.SuccessResponse{
+		Message: "User account was successfully deleted",
 	})
 }

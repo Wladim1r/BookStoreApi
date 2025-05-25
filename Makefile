@@ -15,3 +15,9 @@ docker-start:
 
 test:
 	go test -v ./...
+
+doc-up-n-c:
+	docker compose build --no-cache && docker compose up
+
+swag:
+	swag init -g ./cmd/main.go --parseDependency --parseInternal
