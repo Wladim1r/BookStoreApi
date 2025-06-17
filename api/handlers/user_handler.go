@@ -3,9 +3,11 @@ package handlers
 import (
 	"bookstore-api/api/service"
 	"bookstore-api/internal/lib/errs"
+	"bookstore-api/internal/lib/sl"
 	"bookstore-api/internal/models"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -35,14 +37,19 @@ func (u *UserHandler) Register(c *gin.Context) {
 	var creds models.Request
 
 	if err := c.ShouldBindJSON(&creds); err != nil {
+		slog.Error("handlers.Register", sl.Error(err))
+
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid body request",
 		})
 		return
 	}
 
+	slog.Info("credentials", "creds", creds)
+
 	err := u.Service.CreateUser(creds)
 	if err != nil {
+		slog.Error("handlers.Register", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrInternal):
@@ -84,14 +91,20 @@ func (u *UserHandler) Login(c *gin.Context) {
 	var creds models.Request
 
 	if err := c.ShouldBindJSON(&creds); err != nil {
+		slog.Error("handlers.Login 94", sl.Error(err))
+
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid body request",
 		})
 		return
 	}
 
+	slog.Info("credentials", "creds", creds)
+
 	token, err := u.Service.GetUserToken(creds)
 	if err != nil {
+		slog.Error("handlers.Login 106", sl.Error(err))
+
 		switch {
 		case errors.Is(err, errs.ErrNotRegistred):
 			c.JSON(http.StatusForbidden, models.ErrorResponse{
@@ -118,6 +131,8 @@ func (u *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
+	slog.Debug("users jwt token", "token", token)
+
 	c.JSON(http.StatusOK, models.SuccessResponse{
 		Message: fmt.Sprintf("Your token: %s", token),
 	})
@@ -139,6 +154,7 @@ func (u *UserHandler) GetAllUsers(c *gin.Context) {
 	users, err := u.Service.GetAllUsers()
 
 	if err != nil {
+		slog.Error("handlers.GetAllUsers 157", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrNotFound):
@@ -157,6 +173,8 @@ func (u *UserHandler) GetAllUsers(c *gin.Context) {
 
 		return
 	}
+
+	slog.Debug("users quantity", "number", len(users))
 
 	c.JSON(http.StatusOK, models.UsersResponse{
 		Users: users,
@@ -179,8 +197,11 @@ func (u *UserHandler) GetAllUsers(c *gin.Context) {
 func (u *UserHandler) DeleteByUsername(c *gin.Context) {
 	username := c.Param("username")
 
+	slog.Info("username to delete", "username", username)
+
 	err := u.Service.DeleteByUsername(username)
 	if err != nil {
+		slog.Error("handlers.DeleteByUsername 204", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrNotFound):

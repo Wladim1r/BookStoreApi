@@ -7,7 +7,12 @@ import (
 	_ "bookstore-api/docs"
 	db "bookstore-api/internal/database"
 	"bookstore-api/internal/middleware"
+	cons "bookstore-api/internal/perskafka/consumer"
+	prod "bookstore-api/internal/perskafka/producer"
 	"bookstore-api/internal/utils"
+	"log"
+	"log/slog"
+	"os"
 
 	"github.com/gin-gonic/gin"
 	swaggerFiles "github.com/swaggo/files"
@@ -28,10 +33,28 @@ import (
 func main() {
 	gin.SetMode(gin.ReleaseMode)
 
+	logLevel := slog.LevelInfo
+	if os.Getenv("DEBUG_MODE") == "true" {
+		logLevel = slog.LevelDebug
+	}
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: logLevel,
+	}))
+	slog.SetDefault(logger)
+
 	db := db.InitDB()
 
+	producer, err := prod.GetProducer(os.Getenv("BOOTTRAP"))
+	if err != nil {
+		log.Fatal(err)
+	}
+	consumer, err := cons.GetConsumer(os.Getenv("BOOTTRAP"), os.Getenv("GROUP_ID"))
+	if err != nil {
+		log.Fatal(err)
+	}
+
 	bookRepo := repo.NewBookRepository(db)
-	bookServ := serv.NewBookService(bookRepo)
+	bookServ := serv.NewBookService(bookRepo, producer, consumer, os.Getenv("TOPIC"))
 	bookHandler := hand.NewBookHandler(bookServ)
 
 	userRepo := repo.NewUserRepository(db)

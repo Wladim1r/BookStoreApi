@@ -3,6 +3,7 @@ package middleware
 import (
 	"bookstore-api/internal/models"
 	"bookstore-api/internal/utils"
+	"log/slog"
 	"net/http"
 	"strings"
 
@@ -27,6 +28,8 @@ func JWTAuth() gin.HandlerFunc {
 			return
 		}
 
+		slog.Debug("header of authorization", "authHeader", authHeader)
+
 		parts := strings.Split(authHeader, " ")
 		if len(parts) != 2 || parts[0] != "Bearer" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, models.ErrorResponse{
@@ -34,6 +37,8 @@ func JWTAuth() gin.HandlerFunc {
 			})
 			return
 		}
+
+		slog.Debug("parts of header", "parts", parts)
 
 		token, err := utils.ParseToken(parts[1])
 		if err != nil {

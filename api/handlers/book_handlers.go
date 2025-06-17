@@ -3,8 +3,10 @@ package handlers
 import (
 	"bookstore-api/api/service"
 	"bookstore-api/internal/lib/errs"
+	"bookstore-api/internal/lib/sl"
 	"bookstore-api/internal/models"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -33,6 +35,7 @@ func NewBookHandler(service service.BookService) *BookHandler {
 func (b *BookHandler) GetAllBooks(c *gin.Context) {
 	books, err := b.Service.GetAllBooks()
 	if err != nil {
+		slog.Error("handlers.GetAllBooks", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrNotFound):
@@ -51,6 +54,8 @@ func (b *BookHandler) GetAllBooks(c *gin.Context) {
 
 		return
 	}
+
+	slog.Debug("Books quantity", "number", len(books))
 
 	c.JSON(http.StatusOK, models.UsersBooksResponse{
 		Data: books,
@@ -86,8 +91,15 @@ func (b *BookHandler) GetUserBooks(c *gin.Context) {
 	title := c.Query("title")
 	limitStr := c.Query("limit")
 
+	slog.Info("GetUserBooks request",
+		"author", author,
+		"title", title,
+		"limit", limitStr,
+	)
+
 	books, userID, err := b.Service.GetUserBooks(userID_iface, author, title, limitStr)
 	if err != nil {
+		slog.Error("handlers.GetUserBooks", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrInvalidParam):
@@ -110,6 +122,11 @@ func (b *BookHandler) GetUserBooks(c *gin.Context) {
 
 		return
 	}
+
+	slog.Debug("GetUserBooks response",
+		"books quantity", len(books),
+		"userID", userID,
+	)
 
 	c.JSON(http.StatusOK, models.GetBooks{
 		Data: books,
@@ -145,14 +162,20 @@ func (b *BookHandler) PostBook(c *gin.Context) {
 	var input models.BookRequest
 
 	if err := c.ShouldBindJSON(&input); err != nil {
+		slog.Error("handlers.PostBook", sl.Error(err))
+
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid body request",
 		})
 		return
 	}
 
+	slog.Info("book to add", "book", input)
+
 	err := b.Service.PostBook(userID_iface, input)
 	if err != nil {
+		slog.Error("handlers.PostBook", sl.Error(err))
+
 		c.JSON(http.StatusInternalServerError, models.ErrorResponse{
 			Error: "Database operation failed",
 		})
@@ -190,17 +213,24 @@ func (b *BookHandler) UpdateBook(c *gin.Context) {
 
 	bookIDStr := c.Param("id")
 
+	slog.Info("book id for update", "id", bookIDStr)
+
 	var input models.BookRequest
 
 	if err := c.ShouldBindJSON(&input); err != nil {
+		slog.Error("handlers.UpdateBook", sl.Error(err))
+
 		c.JSON(http.StatusBadRequest, models.ErrorResponse{
 			Error: "Invalid body request",
 		})
 		return
 	}
 
+	slog.Info("new book", "book", input)
+
 	err := b.Service.UpdateBook(userID_iface, bookIDStr, input)
 	if err != nil {
+		slog.Error("handlers.UpdateBook", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrNotFound):
@@ -250,8 +280,11 @@ func (b *BookHandler) DeleteBook(c *gin.Context) {
 
 	bookIDStr := c.Param("id")
 
+	slog.Info("book id to delete", "id", bookIDStr)
+
 	err := b.Service.DeleteBook(userID_iface, bookIDStr)
 	if err != nil {
+		slog.Error("handlers.DeleteBook", sl.Error(err))
 
 		switch {
 		case errors.Is(err, errs.ErrInvalidID):
