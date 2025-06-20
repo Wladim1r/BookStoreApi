@@ -10,10 +10,15 @@ import (
 
 type BookRepository interface {
 	GetAllBooks() ([]models.Book, error)
-	GetUserBooks(uint, string, string, int) ([]models.Book, error)
-	PostBook(models.Book) error
-	UpdateBook(uint, uint, models.Book) error
-	DeleteBook(uint, uint) error
+	GetUserBooks(
+		userID uint,
+		author string,
+		title string,
+		limit int,
+	) ([]models.Book, models.KafkaError)
+	PostBook(book models.Book) models.KafkaError
+	UpdateBook(userID uint, bookID uint, newBook models.Book) models.KafkaError
+	DeleteBook(userID uint, bookID uint) models.KafkaError
 }
 
 type bookRepository struct {
@@ -42,7 +47,7 @@ func (r *bookRepository) GetUserBooks(
 	userID uint,
 	author, title string,
 	limit int,
-) ([]models.Book, error) {
+) ([]models.Book, models.KafkaError) {
 	var books []models.Book
 
 	query := r.db.Model(&models.Book{}).
@@ -63,27 +68,37 @@ func (r *bookRepository) GetUserBooks(
 
 	result := query.Find(&books)
 	if result.Error != nil {
-		return nil, fmt.Errorf("%w: %v", errs.ErrDBOperation, result.Error)
+		return nil, models.KafkaError{
+			Error:   errs.ErrDBOperation.Error(),
+			Message: result.Error.Error(),
+		}
 	}
 
 	if result.RowsAffected == 0 {
-		return nil, errs.ErrNotFound
+		return nil, models.KafkaError{
+			Error: errs.ErrNotFound.Error(),
+		}
 	}
 
-	return books, nil
+	return books, models.KafkaError{}
 }
 
-func (r *bookRepository) PostBook(book models.Book) error {
+func (r *bookRepository) PostBook(book models.Book) models.KafkaError {
 	result := r.db.Create(&book)
 
 	if result.Error != nil {
-		return fmt.Errorf("%w: could not create book %v", errs.ErrDBOperation, result.Error)
+		return models.KafkaError{
+			Error:   errs.ErrDBOperation.Error(),
+			Message: fmt.Sprintf("could not create book %v", result.Error),
+		}
 	}
 
-	return nil
+	return models.KafkaError{}
 }
 
-func (r *bookRepository) UpdateBook(userID, bookID uint, book models.Book) error {
+func (r *bookRepository) UpdateBook(userID, bookID uint, book models.Book) models.KafkaError {
+	var Error, Message string
+
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		result := tx.Model(&models.Book{}).
 			Where(&models.Book{ID: bookID, UserID: userID}).
@@ -91,33 +106,55 @@ func (r *bookRepository) UpdateBook(userID, bookID uint, book models.Book) error
 			Updates(book)
 
 		if result.Error != nil {
+			Error = errs.ErrDBOperation.Error()
+			Message = "could not update book " + result.Error.Error()
 			return fmt.Errorf("%w: cound not update book %v", errs.ErrDBOperation, result.Error)
 		}
 		if result.RowsAffected == 0 {
+			Error = errs.ErrNotFound.Error()
 			return errs.ErrNotFound
 		}
 
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return models.KafkaError{
+			Error:   Error,
+			Message: Message,
+		}
+	}
+
+	return models.KafkaError{}
 }
 
-func (r *bookRepository) DeleteBook(userID, bookID uint) error {
+func (r *bookRepository) DeleteBook(userID, bookID uint) models.KafkaError {
+	var Error, Message string
+
 	err := r.db.Transaction(func(tx *gorm.DB) error {
 		result := tx.Unscoped().
 			Where(&models.Book{ID: bookID, UserID: userID}).
 			Delete(&models.Book{})
 
 		if result.Error != nil {
-			return fmt.Errorf("%w: could not delete book %v", errs.ErrDBOperation, result.Error)
+			Error = errs.ErrDBOperation.Error()
+			Message = "could not update book " + result.Error.Error()
+			return fmt.Errorf("%w: cound not update book %v", errs.ErrDBOperation, result.Error)
 		}
 		if result.RowsAffected == 0 {
+			Error = errs.ErrNotFound.Error()
 			return errs.ErrNotFound
 		}
 
 		return nil
 	})
 
-	return err
+	if err != nil {
+		return models.KafkaError{
+			Error:   Error,
+			Message: Message,
+		}
+	}
+
+	return models.KafkaError{}
 }

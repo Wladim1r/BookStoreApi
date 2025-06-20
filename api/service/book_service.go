@@ -4,8 +4,14 @@ import (
 	"bookstore-api/api/repository"
 	"bookstore-api/internal/lib/errs"
 	"bookstore-api/internal/models"
+	"encoding/json"
 	"fmt"
 	"strconv"
+	"sync"
+	"time"
+
+	"github.com/confluentinc/confluent-kafka-go/v2/kafka"
+	"github.com/google/uuid"
 )
 
 type BookService interface {
@@ -17,11 +23,29 @@ type BookService interface {
 }
 
 type bookService struct {
-	repo repository.BookRepository
+	repo      repository.BookRepository
+	producer  *kafka.Producer
+	consumer  *kafka.Consumer
+	topic     string
+	responses sync.Map
 }
 
-func NewBookService(r repository.BookRepository) BookService {
-	return &bookService{repo: r}
+func NewBookService(
+	r repository.BookRepository,
+	p *kafka.Producer,
+	c *kafka.Consumer,
+	t string,
+) BookService {
+	s := &bookService{
+		repo:     r,
+		producer: p,
+		consumer: c,
+		topic:    t,
+	}
+
+	go s.consumptionMessage()
+
+	return s
 }
 
 func (s *bookService) GetAllBooks() ([]models.UserBooksResponse, error) {
@@ -78,12 +102,62 @@ func (s *bookService) GetUserBooks(
 		}
 	}
 
-	books, err := s.repo.GetUserBooks(userID, author, title, limit)
+	relID := uuid.New().String()
+	ch := make(chan models.KafkaBookResponse)
+	s.responses.Store(relID, ch)
+
+	defer func() {
+		s.responses.Delete(relID)
+		close(ch)
+	}()
+
+	payload := models.GetUserBooksRequest{
+		UserID: userID,
+		Author: author,
+		Title:  title,
+		Limit:  limit,
+	}
+
+	rawMes, err := json.Marshal(payload)
 	if err != nil {
+		return nil, 0, fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
+
+	request := models.KafkaBookRequest{
+		Method:     getUserBooksMethod,
+		Type:       requestType,
+		RelationID: relID,
+		Payload:    json.RawMessage(rawMes),
+	}
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return nil, 0, fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
+
+	if err := s.sendKafkaRequest(requestBytes); err != nil {
 		return nil, 0, err
 	}
 
-	return books, userID, nil
+	select {
+	case resp := <-ch:
+		if resp.Error.Error != "" {
+			if resp.Error.Error == errs.ErrDBOperation.Error() {
+				return nil, 0, fmt.Errorf("%w: %v", errs.ErrDBOperation, resp.Error.Message)
+			}
+			if resp.Error.Error == errs.ErrNotFound.Error() {
+				return nil, 0, fmt.Errorf("%w", errs.ErrNotFound)
+			}
+		}
+
+		var r models.GetUserBooksResponse
+		if err := json.Unmarshal(resp.Result, &r); err != nil {
+			return nil, 0, fmt.Errorf("%w: %v", errs.ErrInternal, err)
+		}
+
+		return r.Books, userID, nil
+	case <-time.After(30 * time.Second):
+		return nil, 0, errs.ErrTimeout
+	}
 }
 
 func (s *bookService) PostBook(
@@ -92,15 +166,52 @@ func (s *bookService) PostBook(
 ) error {
 	userID := interface_into_uint(userID_iface)
 
+	relID := uuid.New().String()
+	ch := make(chan models.KafkaBookResponse)
+	s.responses.Store(relID, ch)
+
+	defer func() {
+		close(ch)
+		s.responses.Delete(relID)
+	}()
+
 	book := models.Book{
 		Title:  input.Title,
 		Author: input.Author,
 		Price:  input.Price,
 		UserID: userID,
 	}
+	rawMes, err := json.Marshal(book)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
 
-	return s.repo.PostBook(book)
+	request := models.KafkaBookRequest{
+		Method:     postBookMethod,
+		Type:       requestType,
+		RelationID: relID,
+		Payload:    json.RawMessage(rawMes),
+	}
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
 
+	if err := s.sendKafkaRequest(requestBytes); err != nil {
+		return err
+	}
+
+	select {
+	case resp := <-ch:
+		if resp.Error.Error != "" {
+			if resp.Error.Error == errs.ErrDBOperation.Error() {
+				return fmt.Errorf("%w: %v", errs.ErrDBOperation, resp.Error.Message)
+			}
+		}
+		return nil
+	case <-time.After(30 * time.Second):
+		return errs.ErrTimeout
+	}
 }
 
 func (s *bookService) UpdateBook(
@@ -115,14 +226,57 @@ func (s *bookService) UpdateBook(
 		return fmt.Errorf("%w: invalid ID in request %v", errs.ErrInvalidID, err)
 	}
 
+	relID := uuid.New().String()
+	ch := make(chan models.KafkaBookResponse)
+	s.responses.Store(relID, ch)
+
+	defer func() {
+		s.responses.Delete(relID)
+		close(ch)
+	}()
+
 	book := models.Book{
+		ID:     uint(bookID),
 		Title:  input.Title,
 		Author: input.Author,
 		Price:  input.Price,
 		UserID: userID,
 	}
+	rawMes, err := json.Marshal(book)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
 
-	return s.repo.UpdateBook(userID, uint(bookID), book)
+	request := models.KafkaBookRequest{
+		Method:     updateBookMethod,
+		Type:       requestType,
+		RelationID: relID,
+		Payload:    json.RawMessage(rawMes),
+	}
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
+
+	if err := s.sendKafkaRequest(requestBytes); err != nil {
+		return err
+	}
+
+	select {
+	case resp := <-ch:
+		if resp.Error.Error != "" {
+			if resp.Error.Error == errs.ErrDBOperation.Error() {
+				return fmt.Errorf("%w: %v", errs.ErrDBOperation, resp.Error.Message)
+			}
+			if resp.Error.Error == errs.ErrNotFound.Error() {
+				return fmt.Errorf("%w", errs.ErrNotFound)
+			}
+		}
+		return nil
+	case <-time.After(30 * time.Second):
+		return errs.ErrTimeout
+	}
+
 }
 
 func (s *bookService) DeleteBook(userID_iface interface{}, bookIDStr string) error {
@@ -133,7 +287,53 @@ func (s *bookService) DeleteBook(userID_iface interface{}, bookIDStr string) err
 		return fmt.Errorf("%w: invalid ID in request %v", errs.ErrInvalidID, err)
 	}
 
-	return s.repo.DeleteBook(userID, uint(bookID))
+	relID := uuid.New().String()
+	ch := make(chan models.KafkaBookResponse)
+	s.responses.Store(relID, ch)
+
+	defer func() {
+		s.responses.Delete(relID)
+		close(ch)
+	}()
+
+	req := models.DeleteBook{
+		ID:     uint(bookID),
+		UserID: userID,
+	}
+	rawMes, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
+
+	request := models.KafkaBookRequest{
+		Method:     deleteBookMethod,
+		Type:       requestType,
+		RelationID: relID,
+		Payload:    json.RawMessage(rawMes),
+	}
+	requestBytes, err := json.Marshal(request)
+	if err != nil {
+		return fmt.Errorf("%w: %v", errs.ErrInternal, err)
+	}
+
+	if err := s.sendKafkaRequest(requestBytes); err != nil {
+		return err
+	}
+
+	select {
+	case resp := <-ch:
+		if resp.Error.Error != "" {
+			if resp.Error.Error == errs.ErrDBOperation.Error() {
+				return fmt.Errorf("%w: %v", errs.ErrDBOperation, resp.Error.Message)
+			}
+			if resp.Error.Error == errs.ErrNotFound.Error() {
+				return fmt.Errorf("%w", errs.ErrNotFound)
+			}
+		}
+		return nil
+	case <-time.After(30 * time.Second):
+		return errs.ErrTimeout
+	}
 }
 
 func interface_into_uint(userID_iface interface{}) uint {

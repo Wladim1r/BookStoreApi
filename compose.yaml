@@ -8,15 +8,75 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"
     command: ["./apilib"]
+
+  kafka:
+    image: confluentinc/cp-server:7.9.1
+    hostname: kafka
+    container_name: kafka
+    ports:
+      - "9092:9092"
+      - "19092:19092"
+    environment:
+      KAFKA_ENABLE_KRAFT: "yes"
+      CLUSTER_ID: "my-kraft-cluster"
+      KAFKA_PROCESS_ROLES: "broker,controller"
+      KAFKA_BROKER_ID: 1
+      KAFKA_CONTROLLER_LISTENER_NAMES: "CONTROLLER"
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: "CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT"
+      KAFKA_LISTENERS: "PLAINTEXT://:9092,CONTROLLER://:19092"
+      KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"
+      KAFKA_CONTROLLER_QUORUM_VOTERS: "1@kafka:19092"
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_CONFLUENT_TELEMETRY_ENABLE: "false"
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      CONFLUENT_METRICS_TOPIC_REPLICATION: 1
+      KAFKA_CONTROLLER_QUORUM_FETCH_TIMEOUT_MS: "30000"
+      KAFKA_CONNECTIONS_MAX_IDLE_MS: "1800000"
+      KAFKA_REQUEST_TIMEOUT_MS: "30000"
+      KAFKA_SOCKET_CONNECTION_SETUP_TIMEOUT_MS: "30000"
+      KAFKA_SOCKET_CONNECTION_SETUP_TIMEOUT_MAX_MS: "30000"
+      KAFKA_LOG4J_LOGGERS: "kafka=ERROR,kafka.controller=ERROR,kafka.network.RequestChannel$=ERROR,state.change.logger=ERROR"
+      KAFKA_LOG4J_ROOT_LOGLEVEL: "ERROR"
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z kafka 9092 || exit 1"]
+      interval: 5s
+      timeout: 10s
+      retries: 10
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: kafka-ui
+    ports:
+      - "9020:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: kraft-cluster
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+      KAFKA_CLUSTERS_0_PROPERTIES_SECURITY_PROTOCOL: "PLAINTEXT"
+      KAFKA_CLUSTERS_0_PROPERTIES_REQUEST_TIMEOUT_MS: "30000"
+      KAFKA_CLUSTERS_0_ZOOKEEPER: ""
+      KAFKA_CLUSTERS_0_KRAFT: "true"
+    depends_on:
+      kafka:
+        condition: service_healthy
+
   db:
-    image: postgres:alpine
+    image: postgres:15.13
     env_file:
       - .env
     environment:
+      - POSTGRES_HOST=${DB_HOST}
       - POSTGRES_USER=${DB_USER}
       - POSTGRES_PASSWORD=${DB_PASSWORD}
       - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_PORT=${DB_PORT}
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${DB_USER}"]
       interval: 10s
@@ -29,3 +89,4 @@ services:
 
 volumes:
   postgres-db:
+  kafka-data:

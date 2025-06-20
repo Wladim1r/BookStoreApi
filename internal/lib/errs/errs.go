@@ -10,4 +10,7 @@ var (
 	ErrInternal      = errors.New("internal server error")
 	ErrNotRegistred  = errors.New("you have not registered yet")
 	ErrNotAuthorized = errors.New("you are not authorized")
+	ErrTimeout       = errors.New("request time expired")
+	ErrKafkaProducer = errors.New("failed to produce message")
+	ErrKafkaConsumer = errors.New("failed to consume message")
 )
